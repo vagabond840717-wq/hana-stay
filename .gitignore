@@ -1,6 +1,9 @@
 # 별도 저장소로 관리 중 (github.com/vagabond840717-wq/ical-proxy)
 ical-proxy/
 
+# 앱들도 각자 저장소로 관리 중 (jnjhana, price, booking, parking)
+app/
+
 # 로컬 전용 설정
 .claude/settings.local.json
 
