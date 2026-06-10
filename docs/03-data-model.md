@@ -120,6 +120,35 @@ hana_ex_<bkKey>
 
 ---
 
+## Push Event (알림 이벤트)
+
+### 저장 위치
+- PUSH_KV key: `events` (최대 50개, 초과 시 오래된 것 제거)
+
+### 구조
+```js
+{
+  id:       "1718000000000_ab1cd",  // `${Date.now()}_${random5}`
+  type:     'new' | 'error' | 'recovered' | 'test',
+  room:     "501 hana",             // 호실명
+  platform: "Booking.com",          // 플랫폼 레이블
+  cin:      "2026/06/10",           // new 타입만. 나머지는 ''
+  cout:     "2026/06/13",           // new 타입만. 나머지는 ''
+  ts:       1718000000000,          // Date.now()
+  read:     false                   // 미확인 여부
+}
+```
+
+### type별 발생 조건
+| type | 발생 시점 |
+|------|---------|
+| `new` | 새 예약 감지 (6개월 이내) |
+| `error` | 동일 호실·플랫폼 3회 연속 실패 (15분) |
+| `recovered` | 미확인 `error`가 있는 호실·플랫폼이 동기화 성공 시 |
+| `test` | `/push/test` 엔드포인트 호출 시 |
+
+---
+
 ## 예약 아카이브 (booking_archive KV)
 
 ### 저장 위치
