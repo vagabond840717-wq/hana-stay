@@ -1,0 +1,11 @@
+# 별도 저장소로 관리 중 (github.com/vagabond840717-wq/ical-proxy)
+ical-proxy/
+
+# 로컬 전용 설정
+.claude/settings.local.json
+
+# 시스템/임시 파일
+Thumbs.db
+desktop.ini
+node_modules/
+*.log
