@@ -128,6 +128,18 @@ E:\airbnb\
 }
 ```
 
+### tr_splits (Trip.com 예약 분할)
+```js
+// localStorage: 'hana_splits' | KV: extra_tr_splits (/extra?key=tr_splits)
+// 예약앱·청소앱 공유. 원본 미변경, 로드 시 trBookings 통짜를 조각으로 치환.
+[{ roomName:"402호", platform:"tr",
+   origCin:{y,m,d}, origCout:{y,m,d},  // m=0-indexed, 완전일치해야 적용
+   decided:true, boundaries:[{y,m,d},...] }]
+// applySplits: 원본 제거+조각 삽입(오버부킹 방지). 원본 바뀌면 자동무효+안내.
+// 원본 백업: room['_raw_trBookings']. 현재 SPLIT_PLATFORMS=['tr'].
+// 상세: docs/features/booking-split.md
+```
+
 ---
 
 ## 앱별 핵심 차이
@@ -140,6 +152,7 @@ E:\airbnb\
 | 달력 스크롤 | 가로만 | 가로+세로 |
 | PWA / 푸시 알림 | ✗ | ✓ |
 | 비밀번호/메모 | ✓ | 확인 필요 |
+| Trip.com 예약 분할 | 반영만(읽기전용) | ✓ 생성/편집 (`tr_splits`) |
 
 ---
 

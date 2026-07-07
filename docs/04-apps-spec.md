@@ -93,6 +93,7 @@
 1. **오버부킹 감지** — 같은 호실 같은 날 두 개 이상의 예약 (플랫폼 무관)
    - 셀: `c-overbooking` (빨간 테두리)
    - 상단 배너: `ob-alerts` 섹션 (빨간 경고 배너)
+   - **오늘 이전 날짜는 판정 제외** — 아카이브에 취소·변경된 옛 예약이 남아 오감지되기 때문 (known-issues #16)
    
 2. **블락 처리** — Airbnb의 'blocked' 이벤트 구분
    - `c-ab-block`: Airbnb 블락 (회색)
@@ -132,6 +133,14 @@
    - 셀 탭 → "N박/M일 · Z%" 툴팁 표시
    - 마지막 행: 전체 평균 점유율
    - 데이터 소스: `/archive` 엔드포인트 (`booking_archive` KV)
+
+8. **Trip.com 합쳐진 예약 수동 분할** (2026.07.01 추가)
+   - Trip.com이 연속 예약을 통짜 블락으로 합쳐 보내는 문제 보정 → 셀 클릭 시 상세에 분할 편집기
+   - 이력(`/archive`) 기반 추천 + 조각별 날짜 선택기(각 예약 체크아웃 `<input type=date>`) + 예약 추가/삭제
+   - 겹치는 날짜 입력 차단(오버부킹 방지), 분할 해제/수정, 원본 피드 변경 시 자동 무효+안내
+   - 저장: `tr_splits` (→ [03-data-model.md](03-data-model.md)) — **청소 스케줄 앱에도 자동 반영** (읽기전용)
+   - 분할 경계일은 `c-tr-both`(아웃/인 반반 + 🌐 아이콘)로 표시
+   - 상세: [features/booking-split.md](features/booking-split.md)
 
 #### 연속 뷰 네비게이션 (2026.06.03 수정)
 - 수정 전: `renderMulti()`가 `today()` 기준으로 하드코딩 → prevBtn/nextBtn visibility hidden

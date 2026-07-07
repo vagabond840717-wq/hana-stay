@@ -318,7 +318,7 @@ function openStatsPanel() {
 ---
 
 ## 변경 파일 목록
-- [ ] `app/JnJ booking/index.html` — CSS/HTML/JS 전부 이 파일 하나
+- [x] `app/JnJ booking/index.html` — CSS/HTML/JS 전부 이 파일 하나
 
 ## 롤백 방법
 - git checkout로 `app/JnJ booking/index.html` 단일 파일 되돌리기

@@ -171,9 +171,50 @@ hana_ex_<bkKey>
 
 ### 관리 규칙
 - Sync 실행 시 자동 병합 (UID 기준 중복 제거)
-- `not available`, `closed`, 빈 summary 제외 — 실제 게스트 예약만 보존
+- 블락 제외 필터는 **플랫폼별로 다름** (2026.07.08 수정 — known-issues #15):
+  - `ab`: summary에 `not available` 포함 시 제외
+  - `bk`: **전부 보존** (Booking.com은 실제 예약도 "CLOSED - Not available"로 옴)
+  - `tr`/`lv`: summary가 `closed`일 때만 제외 (`not available`은 파서에서 이미 제거, 빈 summary는 실제 예약)
+- append-only — 취소·날짜변경된 예약도 남음 (iCal로는 취소 구분 불가). 이 때문에 과거 날짜는 오버부킹 판정에서 제외함 (known-issues #16)
+- **부분 스냅샷 자동 제거** (2026.07.08 — known-issues #17): 같은 플랫폼에서 다른 항목 범위에 완전히 포함되는 항목은 제거. Trip.com의 "오늘~체크아웃" 일일 스냅샷 적립 방지. 워커·예약앱 양쪽에 동일 규칙.
 - 체크아웃 기준 13개월 이전 데이터 자동 정리
 - 호실명이 키에 포함 → 호실명 변경 시 이전 이력 고아 (known-issues #1 동일)
+
+---
+
+## 예약 분할 (tr_splits)
+
+Trip.com이 연속 예약을 하나의 점유 블락으로 합쳐 보낼 때, 사용자가 실제 체크인/체크아웃 경계로 나눈 정의. 원본 예약은 건드리지 않고 이 정의만 별도 저장 → 로드 시 `trBookings`의 통짜를 조각으로 **치환**한다.
+
+### 저장 위치
+- KV key: `extra_tr_splits` (Worker `/extra?key=tr_splits`)
+- localStorage key: `hana_splits`
+- 예약앱·청소앱이 **같은 키를 공유** → 예약앱에서 나눈 결과가 청소앱에도 반영
+
+### 구조
+```js
+// 배열
+[
+  {
+    roomName: "402호",
+    platform: "tr",                 // 현재 Trip.com만 (SPLIT_PLATFORMS)
+    origCin:  {y:2026, m:6, d:9},    // 원본 통짜 체크인 (m=0-indexed)
+    origCout: {y:2026, m:6, d:24},   // 원본 통짜 체크아웃
+    decided:  true,                  // 경계 애매 시 사용자가 확정했는지
+    boundaries: [                    // 내부 경계일들 (조각 = 경계+1개)
+      {y:2026, m:6, d:18},
+      {y:2026, m:6, d:20}
+    ]
+  }
+]
+```
+
+### 적용 규칙 (오버부킹 방지)
+- `applySplits(room)`: 예약이 split의 `origCin/origCout`와 **완전 일치**할 때만 조각으로 치환 (원본 제거 + 조각 삽입, 추가 금지).
+- 조각 경계는 `앞.cout === 뒤.cin` (cout-exclusive) → 경계일이 오버부킹으로 안 잡힘.
+- 원본이 1일이라도 바뀌면 매칭 실패 → **자동 무효**(원본 그대로 표시) + 안내. 단 원본이 비었으면(로드 실패) 판정 보류.
+- 원본 배열은 `room['_raw_trBookings']`에 보관 → 분할 해제/재계산 시 복원.
+- 호실명이 키에 포함 → 호실명 변경 시 고아 (known-issues #1 동일).
 
 ---
 
@@ -212,7 +253,12 @@ const COLORS = [
 | 리브애니웨어 | 숙박중 | `c-lv-occupied` |
 | 리브애니웨어 | 체크아웃 | `c-lv-checkout` |
 | 리브애니웨어 | 체크인 | `c-lv-checkin` |
-| 복수 플랫폼 동시 | 혼합 | `c-dual` |
+| 서로 다른 플랫폼 아웃+인 (1:1) | 반반 셀 | `c-mix-both` — 좌빨강/우초록, 아이콘 2개(아웃쪽 먼저) |
+| 플랫폼 아웃 + 수동 블락 시작 | 반반 셀 | `c-mix-out-bl` — 좌빨강/우블락색 |
+| 플랫폼 아웃 + 에어비앤비 블락 시작 | 반반 셀 | `c-mix-out-abblk` |
+| 그 외 복수 이벤트 동시 (2:1 등) | 혼합 | `c-dual` |
+
+> 아웃/인 반반 셀은 전부 에어비앤비 `c-both`와 동일 레이아웃(좌=아웃/우=인, `bothLbl()`) 사용. 아이콘만 해당 플랫폼(블락은 🔒, 에어비앤비 블락은 🚫). `blockTypeFor`는 블락 첫날에 `'start'` 반환 (2026.07.08).
 
 ---
 
