@@ -134,10 +134,20 @@ E:\airbnb\
 // 예약앱·청소앱 공유. 원본 미변경, 로드 시 trBookings 통짜를 조각으로 치환.
 [{ roomName:"402호", platform:"tr",
    origCin:{y,m,d}, origCout:{y,m,d},  // m=0-indexed, 완전일치해야 적용
-   decided:true, boundaries:[{y,m,d},...] }]
-// applySplits: 원본 제거+조각 삽입(오버부킹 방지). 원본 바뀌면 자동무효+안내.
-// 원본 백업: room['_raw_trBookings']. 현재 SPLIT_PLATFORMS=['tr'].
-// 상세: docs/features/booking-split.md
+   decided:true, boundaries:[{y,m,d},...],
+   inherited:true, autoEdges:[{y,m,d}] }]  // 자동 승계 잠정 분할에만 (decided:false → ⚠배지)
+// applySplits: 원본 제거+조각 삽입(오버부킹 방지). 원본 바뀌면 승계 시도 → 불가 시 자동무효+안내.
+// 원본 백업: room['_raw_trBookings'] — mergeArchiveIntoRooms는 시작 시 raw 복원 후 병합(오염 방지).
+// 현재 SPLIT_PLATFORMS=['tr']. 상세: docs/features/booking-split.md
+```
+
+### tr_feed_prev (피드 스냅샷 — 분할 자동 승계, 예약앱 전용)
+```js
+// localStorage: 'hana_feed_prev' | KV: extra_tr_feed_prev (/extra?key=tr_feed_prev)
+// 직전 Trip.com 원본 통짜 목록. 로드 시 diff → 통짜 합쳐짐이면 잠정 분할(decided:false) 자동 생성.
+{ rooms:{ "402호":[{cinY..coutD},...] }, attention:[{roomName,cin,cout}] }
+// KV write는 내용 변경 시에만. 잠정/attention은 사용자가 확인 카드에서 처리할 때까지 ⚠ 유지.
+// 상세: docs/features/split-inherit.md
 ```
 
 ---
@@ -153,6 +163,7 @@ E:\airbnb\
 | PWA / 푸시 알림 | ✗ | ✓ |
 | 비밀번호/메모 | ✓ | 확인 필요 |
 | Trip.com 예약 분할 | 반영만(읽기전용) | ✓ 생성/편집 (`tr_splits`) |
+| 분할 자동 승계 (⚠배지) | ✗ (결과 조각만 반영) | ✓ 감지/승계/확인 (`tr_feed_prev`) |
 
 ---
 

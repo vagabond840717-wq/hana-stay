@@ -142,6 +142,15 @@
    - 분할 경계일은 `c-tr-both`(아웃/인 반반 + 🌐 아이콘)로 표시
    - 상세: [features/booking-split.md](features/booking-split.md)
 
+9. **분할 자동 승계** (2026.07.15 추가)
+   - 직전 피드 스냅샷(`tr_feed_prev`)과 비교해 통짜 합쳐짐을 감지 → 알던 경계로 **잠정 분할 자동 생성** (통짜로 합쳐 보이지 않게)
+   - 잠정 상태는 달력 셀 **⚠ 배지**(`.attn-badge`, 3개 뷰 공통)로 표시 — 사용자가 확인할 때까지 유지 (토스트는 보조)
+   - 셀 클릭 시 확인 카드: [이대로 확정] / [마지막 손님 연장](autoEdges 1개일 때) / 편집기 직접 수정 / [분할 해제]
+   - 자동 승계 못 하는 애매한 변화는 attention 기록 + ⚠ (조용한 병합 표시 금지 원칙)
+   - 통신 실패 시 판정 보류 — 스냅샷·분할 데이터 보존
+   - 승계 계산·저장은 예약앱 전용 (청소앱은 결과 조각만 반영)
+   - 상세: [features/split-inherit.md](features/split-inherit.md)
+
 #### 연속 뷰 네비게이션 (2026.06.03 수정)
 - 수정 전: `renderMulti()`가 `today()` 기준으로 하드코딩 → prevBtn/nextBtn visibility hidden
 - 수정 후: `curY/curM` 기준으로 변경, visibility 조건 제거 → 이전/다음 정상 작동

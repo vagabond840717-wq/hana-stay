@@ -200,11 +200,14 @@ Trip.com이 연속 예약을 하나의 점유 블락으로 합쳐 보낼 때, �
     platform: "tr",                 // 현재 Trip.com만 (SPLIT_PLATFORMS)
     origCin:  {y:2026, m:6, d:9},    // 원본 통짜 체크인 (m=0-indexed)
     origCout: {y:2026, m:6, d:24},   // 원본 통짜 체크아웃
-    decided:  true,                  // 경계 애매 시 사용자가 확정했는지
+    decided:  true,                  // 사용자가 확정했는지 (false = 잠정 → ⚠ 배지)
     boundaries: [                    // 내부 경계일들 (조각 = 경계+1개)
       {y:2026, m:6, d:18},
       {y:2026, m:6, d:20}
-    ]
+    ],
+    // ↓ 분할 자동 승계(split-inherit)가 만든 잠정 분할에만 존재
+    inherited: true,                 // 스냅샷 비교로 자동 생성됨
+    autoEdges: [{y:2026,m:6,d:24}]   // 옛 가장자리에서 자동 추가된 경계 ("연장이에요" 버튼 대상)
   }
 ]
 ```
@@ -212,9 +215,40 @@ Trip.com이 연속 예약을 하나의 점유 블락으로 합쳐 보낼 때, �
 ### 적용 규칙 (오버부킹 방지)
 - `applySplits(room)`: 예약이 split의 `origCin/origCout`와 **완전 일치**할 때만 조각으로 치환 (원본 제거 + 조각 삽입, 추가 금지).
 - 조각 경계는 `앞.cout === 뒤.cin` (cout-exclusive) → 경계일이 오버부킹으로 안 잡힘.
-- 원본이 1일이라도 바뀌면 매칭 실패 → **자동 무효**(원본 그대로 표시) + 안내. 단 원본이 비었으면(로드 실패) 판정 보류.
+- 원본이 바뀌면 매칭 실패 → 예약앱은 먼저 **자동 승계 시도**(아래 tr_feed_prev), 승계 불가 시 자동 무효 + 안내. 원본이 비었으면(로드 실패) 판정 보류.
 - 원본 배열은 `room['_raw_trBookings']`에 보관 → 분할 해제/재계산 시 복원.
+  `mergeArchiveIntoRooms()`는 시작 시 이 raw를 먼저 복원 후 병합 (재호출 시 백업이 조각 배열로 오염되던 버그 수정, 2026.07.15).
 - 호실명이 키에 포함 → 호실명 변경 시 고아 (known-issues #1 동일).
+
+---
+
+## 피드 스냅샷 (tr_feed_prev) — 분할 자동 승계용
+
+예약앱이 "직전에 본 Trip.com 원본 통짜 목록"을 기억해뒀다가, 다음 로드에서 비교(diff)해 통짜 합쳐짐을 감지한다. 상세: [features/split-inherit.md](features/split-inherit.md)
+
+### 저장 위치 (예약앱 전용 — 청소앱은 안 읽음)
+- KV key: `extra_tr_feed_prev` (Worker `/extra?key=tr_feed_prev`)
+- localStorage key: `hana_feed_prev`
+- KV POST는 **내용이 바뀐 경우에만** (KV write 한도 원칙)
+
+### 구조
+```js
+{
+  rooms: {                          // 호실별 직전 피드 통짜 목록 (Booking 객체 형식)
+    "402호": [ {cinY,cinM,cinD,coutY,coutM,coutD}, ... ]
+  },
+  attention: [                      // 자동 승계 못 한 애매한 변화 (확인 전까지 ⚠ 유지)
+    { roomName:"402호", cin:{y,m,d}, cout:{y,m,d} }
+  ]
+}
+```
+
+### 승계 규칙 (`inheritRoom`)
+- 새 통짜가 직전 조각(또는 기존 split의 원본)을 **완전히 포함**하면: 포함된 조각들의 안쪽 가장자리 + 기존 경계를 이어받아 잠정 split(`decided:false, inherited:true`) 생성.
+- 새 통짜가 직전 조각에 **포함되면**(축소 = 취소): 조용히 통과 (피드가 알아서 나뉨, 기존 무효 처리).
+- 직전과 **겹치지 않으면**(완전 새 예약): 조용히 통과.
+- **어중간하게 겹치면**: `attention` 기록 → 통짜 표시 + ⚠.
+- 잠정 상태는 사용자가 확인 카드에서 선택할 때까지 유지 (새로고침·기기 무관).
 
 ---
 
