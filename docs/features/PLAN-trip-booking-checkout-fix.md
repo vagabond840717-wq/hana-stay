@@ -1,9 +1,20 @@
 # PLAN: Trip.com / Booking.com 체크아웃일 예약가능 처리
 
+> ## ⛔ 이 계획의 2번째 수정(DTEND −1)은 철회됨 (2026-08-05)
+>
+> 아래 "원인"의 첫 줄 전제가 **틀렸다.** Trip.com·Booking.com도 표준대로 **DTEND exclusive**로 보낸다
+> (실측: 트립 예약관리 `체크인 8/17 / 체크아웃 8/22` ↔ 트립 iCal `DTSTART:20260817 / DTEND:20260822`).
+> 체크아웃 당일은 원래부터 예약 가능일로 나가고 있었고, 여기서 하루를 더 빼는 바람에
+> **마지막 숙박일까지 전 채널에서 판매 가능** 상태가 됐다 → 오버부킹.
+>
+> `exportIcal`의 −1은 제거했다(commit 23992de). `DTEND = cout` 그대로가 정답.
+> 함께 넣은 **"Not available 내보내기 제외"(순환 방지)는 유효하므로 유지**한다.
+> 전말은 [05-known-issues.md #21](../05-known-issues.md) 참고.
+
 ## 배경 (문제 분석 완료)
 
 ### 원인
-- Trip.com, Booking.com iCal의 DTEND = 체크아웃 당일 (마지막 막힌 날, 포함)
+- ~~Trip.com, Booking.com iCal의 DTEND = 체크아웃 당일 (마지막 막힌 날, 포함)~~ ← **오판**
 - HANA STAY가 이 DTEND를 그대로 Airbnb에 내보냄
 - Airbnb가 DTEND를 포함으로 읽어서 체크아웃 당일을 블락
 - Airbnb가 "Not Available" 생성 (DTSTART=체크아웃일, DTEND=체크아웃일+1)
@@ -106,8 +117,15 @@ if (platform === 'airbnb' && summary.toLowerCase().includes('not available')) {
 
 ---
 
+## 구현 상태
+
+- [x] `ical-proxy/worker.js` `parseIcal` — 에어비앤비 "Not Available" DTEND exclusive 처리 (기존 적용됨)
+- [x] `ical-proxy/worker.js` `exportIcal` — Not available 제외 (순환 방지) — **유지**
+- [x] ~~`exportIcal` tr/bk 체크아웃일 -1일 내보내기 (2026-08-01 적용)~~ → **철회·제거 (2026-08-05, commit 23992de)**
+
 ## 확인 필요
 
-- 수정 후 `wrangler deploy` 실행
-- 앱에서 동기화(새로고침) 후 402호 7/25 확인
-- Booking.com도 동일하게 동작하는지 확인
+- [x] 배포 — GitHub Actions 자동 배포 확인 (`/ical/402 jnj` 응답이 트립 원본과 DTEND 일치)
+- [ ] 각 채널이 새 피드를 다시 읽어간 뒤, 402호 **8/21 잠김 / 8/22 열림** 확인
+- [ ] `parseIcal`의 에어비앤비 "Not available" −1 처리 재검토 — 내보내기에서 제외되므로 당장 피해는 없으나,
+      이 경로만 `cout`이 inclusive라 앱 화면에서 에어비앤비 블락이 하루 짧게 보일 가능성

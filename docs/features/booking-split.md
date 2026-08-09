@@ -1,5 +1,11 @@
 # Trip.com 합쳐진 예약 수동 분할 (booking-split) 스펙
 
+> ⚠ **2026.08.06 — 이 문서의 저장 구조 설명은 옛것입니다.**
+> `tr_splits`(기간+경계) → **`tr_cuts`(경계 날짜만)** 로 교체됐습니다.
+> 옛 방식은 기간 완전일치를 요구해 예약이 연장·단축되면 정의가 통째로 무효가 됐습니다.
+> 현재 구조는 [03-data-model.md](../03-data-model.md#예약-경계-tr_cuts) 를 보세요.
+> 아래 UI·판정 설명은 대부분 유효하나, `origCin/origCout/boundaries/decided` 관련 서술은 무시하세요.
+
 > **상태: 완료 (확정)**
 > - 완료일: 2026.07.01
 > - 구현 파일: `app/JnJ booking/index.html` (분할 생성/편집/감지/무효안내), `app/JnJ/index.html` (분할 반영, 읽기전용)

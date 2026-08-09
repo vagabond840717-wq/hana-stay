@@ -6,6 +6,12 @@
       "runtimeExecutable": "powershell.exe",
       "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/static-server.ps1"],
       "port": 8791
+    },
+    {
+      "name": "cleaning-app",
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ".claude/static-server.ps1", "-Root", "E:\\airbnb\\app\\JnJ", "-Port", "8792"],
+      "port": 8792
     }
   ]
 }

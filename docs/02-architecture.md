@@ -15,7 +15,8 @@
   ├── POST /extra    → KV에 비밀번호/메모 저장
   ├── GET /bookings  → synced_bookings KV 반환 (달력 표시용)
   ├── POST /sync     → iCal 동기화 실행
-  └── GET /archive   → booking_archive KV 반환 (통계 뷰용)
+  ├── GET /archive   → booking_archive KV 반환 (통계 뷰용)
+  └── GET /ical/<호실명> → HANA STAY 통합 iCal 내보내기 (각 플랫폼이 구독)
         │
         ▼
 [Cloudflare KV]      ← 서버 측 영속 저장소
@@ -42,6 +43,23 @@ POST /rooms          → 호실 배열 저장 (body: JSON 배열)
 GET  /extra?key=<bkKey>   → 해당 키의 { passwords, memos } 반환
 POST /extra               → { key, data } 저장
 ```
+
+### iCal 내보내기 (⚠ 전 채널 영향)
+```
+GET https://ical-proxy.vagabond1984.workers.dev/ical/<호실명>
+예: /ical/402%20jnj
+```
+- `synced_bookings` KV + `extra_manual_blocks` KV를 합쳐 하나의 iCal로 내보냄
+- **에어비앤비·부킹닷컴·리브애니웨어가 각각 이 주소를 구독**한다 → 여기를 고치면 전 채널이 동시에 바뀐다
+- `DTEND = cout` **그대로** 내보낸다. iCal의 `DTEND;VALUE=DATE`는 포함 안 되는 날이므로 이것만으로
+  체크아웃 당일이 판매 가능일이 된다. **여기서 하루를 빼면 마지막 숙박일이 열려 오버부킹**
+  ([05-known-issues.md #21](05-known-issues.md))
+- 에어비앤비 "Not available" 항목은 내보내지 않는다 (되받아 읽으며 블락이 번지는 순환 방지)
+- 수동 블락은 `end`가 inclusive 저장이라 내보낼 때만 `+1일`
+
+> **검증 방법**: 에어비앤비는 **가져온 달력의 블락을 자기 iCal로 다시 내보내지 않는다.**
+> 따라서 "우리가 보낸 게 제대로 반영됐는지"는 피드 대조로 알 수 없고 **에어비앤비 앱 달력 화면**을 봐야 한다.
+> 반대로 "우리가 뭘 보내고 있는지"는 위 주소를 직접 받아보면 즉시 확인된다.
 
 ## 데이터 저장 이중화 전략
 
