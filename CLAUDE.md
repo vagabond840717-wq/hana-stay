@@ -240,9 +240,20 @@ cellTypeFor(bookings, day, y, m)
 
 ### 저장 패턴
 ```js
-localStorage 즉시 → fetch(KV) 비동기 + .catch(()=>{})
-로드: KV 우선 → 실패 시 localStorage 폴백
+// 단독 값(비밀번호·메모 등): localStorage 즉시 → fetch(KV) 비동기 + .catch(()=>{})
+// 로드: KV 우선 → 실패 시 localStorage 폴백
 ```
+
+**⚠ 공유 목록(`manual_blocks`, `tr_cuts`)은 위 패턴을 쓰면 안 된다.**
+호실 구분 없이 배열 하나로 저장되므로, 통째 덮어쓰기는 **다른 기기·다른 호실의 항목을 지운다** (#22, #26).
+```js
+// 반드시 saveListMerged 경유 — 저장 직전 서버 최신 배열을 다시 읽고 '내 변경만' 얹는다
+await saveBlocksMerged({type:'add'|'replace'|'remove', block, oldBlock})
+await saveCutsMerged({type:'add'|'remove', cut|roomName+p})   // commitCuts(op)가 감싸고 있음
+```
+- **서버를 못 읽으면 쓰지 않는다.** 실패 시 토스트 + 화면의 낙관적 변경 되돌리기
+- `localStorage`는 **서버 저장 성공 후에만** 갱신 (낡은 로컬본이 폴백으로 되살아나지 않게)
+- **"못 읽었다"를 "비어 있다"로 해석하지 말 것** — #22·#26·#27이 전부 이 한 가지 실수에서 나왔다
 
 ### 렌더 사이클
 ```
