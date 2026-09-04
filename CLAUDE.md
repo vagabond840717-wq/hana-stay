@@ -119,7 +119,7 @@ E:\airbnb\
 | GET | `/ical/<호실명>` | **HANA STAY 통합 iCal 내보내기** — 아래 주의 |
 | GET | `/daylock` | 트립 당일잠금 판정 상태 (진단용) |
 | POST | `/daylock/backfill` | 굳은 가짜 소급 교정 (`?dry=1` 예행) |
-| GET | `/?url=<ical>&fix=tr&room=<호실>` | 청소앱용 — 가짜 하룻밤을 걷어낸 iCal |
+| GET | `/?url=<ical>&fix=tr\|bk&room=<호실>` | 청소앱용 — 교정본 iCal (아래 참조) |
 
 **워커 소스**: `E:\airbnb\ical-proxy\worker.js` (별도 저장소 `vagabond840717-wq/ical-proxy`, git push → 자동 배포)
 
@@ -215,6 +215,24 @@ const de = `${bk.coutY}${String(bk.coutM+1).padStart(2,'0')}${String(bk.coutD).p
 //    트립은 자기가 잠갔고 부킹·리브는 막힌 채로 둔다. 조건을 넓히려면 별도 승인
 // ⛔ fix 없는 /?url= 은 원본 그대로 — #28 판별 순서 1번(원본 대조)을 오염시키지 말 것
 // 소급 청소: POST /daylock/backfill (?dry=1 예행). 상세: docs/features/trip-daylock.md
+```
+
+### 앞잘림 복원 (untrim) — 새 저장소 없음, 아카이브를 읽기만 함 (2026-09-05)
+```js
+// 왜: 부킹·트립은 iCal 로 '예약'이 아니라 '지금부터 못 파는 날'을 보낸다.
+//     SUMMARY 가 성격을 말한다 — bk 'CLOSED - Not available' / tr 'RoomStatus Fully booked' (재고)
+//     vs ab 'Reserved' (예약). 재고를 보내는 두 채널만 지난 밤을 잘라낸다.
+//     앱은 '막힘이 시작하는 칸'을 체크인으로 읽어서 → 어제 들어온 손님이 오늘 또 체크인으로 보인다.
+// 교정 둘 (worker.js — 판정은 워커 한 곳에만 둔다):
+//   ① untrimSegs        아카이브에 '끝 날짜 같고 시작만 더 이른' 조각 + 피드 시작이 오늘·어제 → 되돌림
+//                       (bk·tr 만. ab 는 안 자름)
+//   ② restoreTodayCheckouts  아카이브의 '퇴실 == 오늘' 조각이 피드에 없으면 되살림 (네 채널 전부)
+// 적용: GET /bookings(예약앱) / GET /?url=&fix=tr|bk&room=(청소앱 옵트인)
+// ⛔ exportIcal 은 synced_bookings 원본만 읽는다 → 내보내기 무영향. 되살린 조각은 절대 안 나간다
+// ⛔ 앞날 것은 절대 되살리지 않는다 — 아카이브엔 취소분이 남아 있다 (#16)
+// 안전 근거: 되살아나는 밤은 전부 지난 밤, 퇴실일은 cout-exclusive → 판매 가능일이 안 바뀐다
+//            (시험: '오늘 이후 시작하는 조각이 새로 생기는지' 전수 0건)
+// 상세: docs/05-known-issues.md #29
 ```
 
 ### tr_feed_prev (피드 스냅샷 — ⚠ 확인 판정, 예약앱 전용)
