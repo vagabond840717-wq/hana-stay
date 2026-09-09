@@ -267,6 +267,7 @@ listed = (targetNetN + clean) / ((1 - rate) × N)
 ## 4. 주차 관리 (`app/parking-main/`)
 
 ### 개요
+- 저장소 `vagabond840717-wq/parking` — 프론트는 **GitHub Pages** (루트 `index.html`), 백엔드는 Cloudflare Worker
 - Cloudflare Worker 기반 KV 저장소
 - 프론트엔드는 `parking-main/index.html` (별도 구현)
 
@@ -275,6 +276,28 @@ listed = (targetNetN + clean) / ((1 - rate) × N)
 GET  /kv?key=<key>       → { value: "..." }
 POST /kv                 → { key, value } → { ok: true }
 ```
+워커는 **KV 통과용일 뿐 날짜 로직이 없다** → 날짜 관련 문제는 전부 `index.html` 쪽이다.
 
 ### 환경 변수
 - `PARKING_KV`: Cloudflare KV 네임스페이스 바인딩
+
+### 데이터 구조
+```js
+// KV: parking_data  (WORKER_URL/kv?key=parking_data)
+{ "L2-2": [ { room:"302", car:"384누 8008", start:"2026-09-09", end:"2026-09-10",
+              contact:"", memo:"" }, ... ] }   // 슬롯당 배열, 여러 예약 보관
+// 자리 10개: L1(2) · L2(2) · L3(3) · L4(3).  outer=바깥 / inner=안쪽(이중주차)
+```
+- `end` 는 **exclusive** — `start <= 날짜 && end > 날짜` 일 때만 그 날 주차 중
+  (`getActiveResvOnDate`). `end === 오늘` = **오늘 출차하는 날** → 배너가 이걸 읽는다
+
+### ⚠ 날짜는 반드시 기기 로컬 기준 (2026.09.09)
+```js
+function ymd(dt){ return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`; }
+function todayStr(){ return ymd(new Date()); }
+```
+- **`toISOString()` 을 날짜 문자열로 쓰지 말 것** — UTC로 바뀌어 KST 자정~오전 9시에 하루 밀린다.
+  예약앱 `today()`·청소앱 `today()`와 동일한 로컬 방식으로 통일했다 ([#30](05-known-issues.md))
+- `new Date('YYYY-MM-DD')` 도 **UTC 자정 파싱**이다 → 날짜 이동은 연·월·일을 분해해 `new Date(y, m-1, d)`
+- **KST 하드코딩 금지** — 세 앱이 같은 시계를 봐야 화면끼리 어긋나지 않는다
+- `autoExpire()` 는 `end >= todayStr()` — **지난 예약만** 지운다. 오늘 출차분은 배너가 쓰므로 남긴다

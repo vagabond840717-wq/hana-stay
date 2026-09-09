@@ -312,6 +312,8 @@ render() → calendarArea.innerHTML 전체 교체 → attachCellClicks() 재등�
 - [ ] iCal 파서 4개 모두 확인했는가?
 - [ ] bkKey 변경인가? → 마이그레이션 필요
 - [ ] 날짜 월 값이 0-indexed인지 확인
+- [ ] **`toISOString()`으로 날짜 문자열을 만들지 않았는가?** → UTC라 KST 새벽~오전 9시에 하루 밀린다 (#30)
+      `new Date('YYYY-MM-DD')` 도 UTC 자정 파싱이다. 앱 세 개 모두 `getFullYear/getMonth/getDate` 로컬 방식
 - [ ] `render()` 호출 후 `attachCellClicks()` 체인 유지되는가?
 
 수정 후:
