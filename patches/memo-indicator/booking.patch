@@ -1,0 +1,256 @@
+diff --git a/index.html b/index.html
+index ddaaad9..398d4a9 100644
+--- a/index.html
++++ b/index.html
+@@ -146,6 +146,10 @@ thead { position: sticky; top: 0; z-index: 10; }
+ .cell-icon { font-size: 9px; line-height: 1; display: block; pointer-events: none; }
+ /* 분할 자동 승계 — 확인 필요(잠정) 배지: 확인 전까지 유지됨 */
+ .attn-badge { position: absolute; top: -1px; right: 0px; font-size: 8px; line-height: 1; z-index: 2; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.45); }
++.memo-badge { position: absolute; top: -1px; font-size: 9px; line-height: 1; z-index: 2; pointer-events: none; filter: drop-shadow(0 0 1px rgba(0,0,0,0.6)); }
++.memo-badge.mb-r { right: 0; } .memo-badge.mb-r2 { right: 9px; } .memo-badge.mb-c { left: calc(50% - 10px); }
++.memo-who { font-size: 11px; color: var(--text2); font-weight: 500; margin-left: 4px; }
++.memo-item-head { font-size: 10px; color: var(--text3); margin-bottom: 2px; font-family: 'DM Mono', monospace; }
+ .cell-txt { font-size: 8px; font-weight: 700; line-height: 1; display: block; pointer-events: none; }
+ 
+ /* 예약 셀: 어두운 회색 배경, 밝기 적당한 컬러 */
+@@ -820,11 +824,14 @@ async function loadRooms() {
+ //   · 로드에 실패해 빈 목록을 들고 있는 상태에서 하나만 추가하면 나머지가 전멸했다 (#26)
+ // ⚠ 서버를 못 읽으면 아예 쓰지 않는다. 남의 기록을 지우느니 내 저장을 실패시키는 게 낫다.
+ //    (실패는 토스트로 알리고 화면의 낙관적 변경도 되돌린다 — 저장 안 된 걸 저장된 것처럼 두지 않는다)
+-async function saveListMerged(key, lsKey, apply){
++// emptyOk: 서버에 그 키가 아직 없을 때 워커가 주는 기본값({passwords:[],memos:[]})을 '빈 목록'으로 본다.
++//          (그 기본값은 KV 에 값이 없을 때만 온다 — 읽기 실패와 다르다). 메모 목록 전용
++async function saveListMerged(key, lsKey, apply, emptyOk=false){
+   let server=null;
+   try{
+     const resp=await fetch(`${PROXY}/extra?key=${encodeURIComponent(key)}`);
+-    if(resp.ok){ const d=await resp.json(); if(Array.isArray(d)) server=d; }
++    if(resp.ok){ const d=await resp.json(); if(Array.isArray(d)) server=d;
++      else if(emptyOk&&d&&Array.isArray(d.memos)&&!d.memos.length&&Array.isArray(d.passwords)&&!d.passwords.length) server=[]; }
+   }catch(e){}
+   if(!server){ showToast('서버에 저장하지 못했어요 — 연결 확인 후 다시 해주세요'); return null; }
+   const merged=apply(server.slice());
+@@ -1108,13 +1115,92 @@ async function loadExtra(key){
+   return getExtra(key);
+ }
+ 
++// ── MEMO (메모 📝 표시 — memo-indicator) ──
++// 서랍 이름: 에어비앤비 <호실>|<입실일> / 부킹·트립·리브·블락은 꼬리표 _bk _tr _lv _bl (청소앱과 같다)
++// 메모 목록 memo_index: 메모가 있는 서랍만 한 줄 [{key,room,ch,cin,cout,uid?}]. 달력 📝 는 이것만 본다
++// ⛔ 날짜 이동·30일 정리 판정은 워커(upkeepMemos) 한 곳에만. 앱은 쓰고 지울 때 줄만 넣고 뺀다 (#2)
++let memoIndex = [];
++let _memoRanges = null;   // render 마다 다시 만든다
++const MEMO_CH   = {airbnb:'ab','ab-block':'ab',booking:'bk',trip:'tr',lv:'lv',block:'bl'};
++const MEMO_SFX  = {ab:'',bk:'_bk',tr:'_tr',lv:'_lv',bl:'_bl'};
++const MEMO_ICON = {ab:'✈',bk:'🏨',tr:'🌐',lv:'🏡',bl:'🔒'};
++const ymd8 = (y,m,d) => `${y}${String(m+1).padStart(2,'0')}${String(d).padStart(2,'0')}`;
++function drawerKey(roomName,e){ return `${roomName}|${ymd8(e.cinY,e.cinM,e.cinD)}${MEMO_SFX[MEMO_CH[e.platform]]}`; }
++// 머리표 "🏨 10/20~10/28" — 메모를 쓴 순간의 예약으로 고정 (옛 메모는 지금 예약으로 대신한다)
++function memoHead(memo,e){
++  const ch=memo.ch||MEMO_CH[e.platform];
++  const cin=memo.cin||ymd8(e.cinY,e.cinM,e.cinD);
++  const cout=memo.ch?(memo.cout||''):ymd8(e.coutY,e.coutM,e.coutD);
++  const md=s=>s?`${+s.slice(4,6)}/${+s.slice(6,8)}`:'';
++  return `${MEMO_ICON[ch]||''} ${md(cin)}~${md(cout)}`;
++}
++async function loadMemoIndex(){
++  try{
++    const resp=await fetch(`${PROXY}/extra?key=memo_index`);
++    if(resp.ok){
++      const d=await resp.json();
++      if(Array.isArray(d)){ memoIndex=d; try{localStorage.setItem('hana_memo_index',JSON.stringify(d));}catch(e){} return; }
++      if(d&&Array.isArray(d.memos)&&!d.memos.length){ memoIndex=[]; return; }   // 아직 목록이 없다
++    }
++  }catch(e){}
++  try{ const d=JSON.parse(localStorage.getItem('hana_memo_index')||'null'); if(Array.isArray(d)) memoIndex=d; }catch(e){}
++}
++// 메모를 쓰거나 지운 뒤 — 그 서랍에 메모가 남았는지로 목록 한 줄을 넣고 뺀다
++async function syncMemoIndex(key,e,roomName){
++  const ch=MEMO_CH[e.platform]; if(!ch) return;
++  const has=(getExtra(key).memos||[]).length>0;
++  const row={key,room:roomName,ch,cin:ymd8(e.cinY,e.cinM,e.cinD),cout:ymd8(e.coutY,e.coutM,e.coutD),...(e.uid?{uid:e.uid}:{})};
++  const res=await saveListMerged('memo_index','hana_memo_index',list=>{
++    const out=list.filter(x=>x.key!==key); if(has) out.push(row); return out;
++  },true);
++  if(res){ memoIndex=res; render(); attachCellClicks(); }
++}
++// 목록 한 줄 → 지금 화면의 예약 기간. 예약이 사라졌으면 null (📝 안 뜸, 메모는 그대로)
++function memoRangesFor(room){
++  if(!_memoRanges) _memoRanges={};
++  if(_memoRanges[room.name]) return _memoRanges[room.name];
++  const out=[];
++  for(const row of memoIndex){
++    if(row.room!==room.name) continue;
++    if(row.ch==='bl'){
++      const b=manualBlocks.find(b=>b.roomName===room.name&&ymd8(b.startY,b.startM,b.startD)===row.cin);
++      if(b) out.push({a:+row.cin,z:+ymd8(b.endY,b.endM,b.endD),blk:true});
++      continue;
++    }
++    const arr={ab:[...(room.bookings||[]),...(room.abBlocks||[])],bk:room.bkBookings,tr:room.trBookings,lv:room.lvBookings}[row.ch]||[];
++    let b=row.uid?arr.find(x=>x.uid===row.uid):null;
++    if(!b) b=arr.find(x=>ymd8(x.cinY,x.cinM,x.cinD)===row.cin);
++    if(b) out.push({a:+ymd8(b.cinY,b.cinM,b.cinD),z:+ymd8(b.coutY,b.coutM,b.coutD),blk:false});
++  }
++  return _memoRanges[room.name]=out;
++}
++// 그 칸에 붙일 📝 위치들: 'r' 오른쪽 위 / 'c' 가운데 위(반반 칸의 나가는 손님 쪽)
++function memoBadges(room,d,y,m){
++  if(!memoIndex.length) return [];
++  const cur=dnum({y,m,d});
++  let whole=false,out=false,inn=false;
++  for(const g of memoRangesFor(room)){
++    if(cur<g.a||cur>g.z) continue;
++    if(g.blk){ if(cur===g.a) inn=true; else whole=true; continue; }
++    if(cur===g.z) out=true; else if(cur===g.a) inn=true; else whole=true;
++  }
++  if(whole||(inn&&!out)) return ['r'];
++  if(!out) return [];
++  // 나가는 손님 메모 — 그날 들어오는 쪽이 있으면(반반 칸) 가운데 위, 아니면 오른쪽 위
++  const isIn=b=>ymd8(b.cinY,b.cinM,b.cinD)===String(cur);
++  const dayHasIn=[room.bookings,room.abBlocks,room.bkBookings,room.trBookings,room.lvBookings].some(a=>(a||[]).some(isIn))
++    ||manualBlocks.some(b=>b.roomName===room.name&&ymd8(b.startY,b.startM,b.startD)===String(cur));
++  if(!dayHasIn) return ['r'];
++  return inn?['c','r']:['c'];
++}
++
+ // ── SYNC ──
+ async function triggerSync() {
+   const icon=document.getElementById('syncIcon');
+   icon.classList.add('spin');
+   document.getElementById('syncTime').textContent='동기화 중...';
+   try{await fetch(`${PROXY}/sync`,{method:'POST'});}catch(e){}
+-  await loadBookingsFromKV();
++  await Promise.all([loadBookingsFromKV(), loadMemoIndex()]);
+   mergeArchiveIntoRooms();
+   icon.classList.remove('spin');
+   document.getElementById('syncTime').textContent=nowStr()+' 기준';
+@@ -1222,7 +1308,11 @@ function needsAttention(roomName,y,m,d){
+ }
+ function cellClsAndLbl(room,d,y,m){
+   const r=cellClsAndLblBase(room,d,y,m);
+-  if(needsAttention(room.name,y,m,d)) r.lbl+='<span class="attn-badge">⚠</span>';
++  const attn=needsAttention(room.name,y,m,d);
++  if(attn) r.lbl+='<span class="attn-badge">⚠</span>';
++  // 📝 — 칸 색은 그대로, 배지만 얹는다. 오버부킹 칸은 경고가 우선이라 붙이지 않는다
++  if(r.cls!=='c-overbooking')
++    for(const pos of memoBadges(room,d,y,m)) r.lbl+=`<span class="memo-badge mb-${pos==='r'&&attn?'r2':pos}">📝</span>`;
+   return r;
+ }
+ function cellClsAndLblBase(room,d,y,m){
+@@ -1599,6 +1689,7 @@ function emptyState(){
+ }
+ 
+ function render(){
++  _memoRanges=null;
+   const isMulti=viewMode==='multi';
+   document.getElementById('monthDisplay').textContent=`${curY}. ${String(curM+1).padStart(2,'0')}`;
+   document.getElementById('prevBtn').style.visibility='visible';
+@@ -1802,13 +1893,19 @@ async function openDetail(ri,y,m,d){
+         ${sugHtml}
+       </div>`;
+   }
++  // 메모는 손님(예약)마다 따로 — 나가는 손님, 머무는 손님, 들어오는 손님 순
++  const blkEntry=manualBl?(()=>{const e=new Date(manualBl.endY,manualBl.endM,manualBl.endD+1);
++    return{platform:'block',cinY:manualBl.startY,cinM:manualBl.startM,cinD:manualBl.startD,coutY:e.getFullYear(),coutM:e.getMonth(),coutD:e.getDate()};})():null;
++  const roleOf=e=>(e.coutY===y&&e.coutM===m&&e.coutD===d)?0:(e.cinY===y&&e.cinM===m&&e.cinD===d)?2:1;
++  const memoEntries=[...allBks,...(blkEntry?[blkEntry]:[])].sort((a,b)=>roleOf(a)-roleOf(b))
++    .filter((e,i,arr)=>arr.findIndex(o=>drawerKey(r.name,o)===drawerKey(r.name,e))===i);   // 같은 서랍은 한 번만
++  const memoKeys=memoEntries.length
++    ?memoEntries.map(e=>drawerKey(r.name,e))
++    :[`${r.name}|${dateStr(y,m,d)}`];   // 예약 없는 날 — 예전처럼 날짜 서랍 (목록·📝 없음)
+   const firstBk=allBks[0];
+-  const pwKey=firstBk
+-    ?`${r.name}|${firstBk.cinY}${String(firstBk.cinM+1).padStart(2,'0')}${String(firstBk.cinD).padStart(2,'0')}`
+-    :manualBl
+-      ?`${r.name}|${manualBl.startY}${String(manualBl.startM+1).padStart(2,'0')}${String(manualBl.startD).padStart(2,'0')}`
+-      :`${r.name}|${dateStr(y,m,d)}`;
+-  const extra=await loadExtra(pwKey);
++  const pwKey=firstBk?drawerKey(r.name,firstBk):blkEntry?drawerKey(r.name,blkEntry):memoKeys[0];
++  await Promise.all([...new Set([pwKey,...memoKeys])].map(k=>loadExtra(k)));
++  const extra=getExtra(pwKey);
+   const curPw=extra.passwords&&extra.passwords.length?extra.passwords[0]:null;
+   let pwHtml=`<div class="d-section-title" style="margin-top:4px;">🔑 도어락 비밀번호</div>
+   <div class="pw-current-box">
+@@ -1825,16 +1922,22 @@ async function openDetail(ri,y,m,d){
+     extra.passwords.slice(1).forEach(p=>{pwHtml+=`<div class="pw-history-item"><span class="pw-history-pw">${p.pw}</span><span class="pw-history-meta">${p.date}</span></div>`;});
+   }
+   pwHtml+=`</div>`;
+-  const memos=extra.memos||[];
+-  let memoHtml=`<div class="d-section-title" style="margin-top:4px;">📝 메모</div>
+-  <div class="memo-input-row" style="margin-bottom:8px;">
+-    <textarea class="memo-textarea" id="memoInput" placeholder="이 예약에 대한 메모를 입력하세요..."></textarea>
+-    <button class="memo-add-btn" id="memoAddBtn">추가</button>
+-  </div><div id="memoList">`;
+-  memos.forEach((memo,i)=>{
+-    memoHtml+=`<div class="memo-item"><div class="memo-item-body"><div class="memo-item-text">${memo.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div><div class="memo-item-date">${memo.date}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button class="memo-edit-btn" data-idx="${i}">✎</button><button class="memo-del" data-idx="${i}">✕</button></div></div>`;
++  let memoHtml='';
++  const multiMemo=memoKeys.length>1;
++  memoKeys.forEach((key,ki)=>{
++    const e=memoEntries[ki];
++    const who=multiMemo&&e?`<span class="memo-who">${memoHead({},e)} · ${['나가는 손님','머무는 손님','들어오는 손님'][roleOf(e)]}</span>`:'';
++    memoHtml+=`<div class="d-section-title" style="margin-top:4px;">📝 메모${who}</div>
++    <div class="memo-input-row" style="margin-bottom:8px;">
++      <textarea class="memo-textarea" id="memoInput_${ki}" placeholder="이 예약에 대한 메모를 입력하세요..."></textarea>
++      <button class="memo-add-btn" data-ki="${ki}">추가</button>
++    </div><div>`;
++    (getExtra(key).memos||[]).forEach((memo,i)=>{
++      const head=e?`<div class="memo-item-head">${memoHead(memo,e)}</div>`:'';
++      memoHtml+=`<div class="memo-item"><div class="memo-item-body">${head}<div class="memo-item-text">${memo.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div><div class="memo-item-date">${memo.date}</div></div><div style="display:flex;flex-direction:column;gap:4px;"><button class="memo-edit-btn" data-ki="${ki}" data-idx="${i}">✎</button><button class="memo-del" data-ki="${ki}" data-idx="${i}">✕</button></div></div>`;
++    });
++    memoHtml+=`</div>`;
+   });
+-  memoHtml+=`</div>`;
+   document.getElementById('detailBody').innerHTML=obHtml+bkHtml+blockHtml+splitHtml+pwHtml+memoHtml;
+   document.getElementById('detailPanel').classList.add('open');
+   // 경계 카드 버튼
+@@ -1910,26 +2013,36 @@ async function openDetail(ri,y,m,d){
+     setExtra(pwKey,ex);showToast('비밀번호 저장됨 🔑');openDetail(ri,y,m,d);
+   };
+   document.getElementById('pwInput').onkeydown=e=>{if(e.key==='Enter')document.getElementById('pwSaveBtn').click();};
+-  document.getElementById('memoAddBtn').onclick=()=>{
+-    const text=document.getElementById('memoInput').value.trim();if(!text)return;
+-    const ex=getExtra(pwKey);if(!ex.memos)ex.memos=[];
+-    ex.memos.unshift({text,date:nowStr()});setExtra(pwKey,ex);openDetail(ri,y,m,d);
+-  };
+-  document.querySelectorAll('.memo-del').forEach(btn=>{
+-    btn.onclick=()=>{const idx=+btn.dataset.idx;const ex=getExtra(pwKey);ex.memos.splice(idx,1);setExtra(pwKey,ex);openDetail(ri,y,m,d);};
++  const memoKeyOf=btn=>memoKeys[+btn.dataset.ki], memoEntryOf=btn=>memoEntries[+btn.dataset.ki];
++  const afterMemoChange=btn=>{ const e=memoEntryOf(btn); if(e) syncMemoIndex(memoKeyOf(btn),e,r.name); };
++  document.querySelectorAll('#detailBody .memo-add-btn').forEach(btn=>{
++    btn.onclick=()=>{
++      const ki=+btn.dataset.ki, key=memoKeys[ki], e=memoEntries[ki];
++      const text=document.getElementById(`memoInput_${ki}`).value.trim();if(!text)return;
++      const ex=getExtra(key);if(!ex.memos)ex.memos=[];
++      // 쓴 순간의 예약을 같이 적는다 → 머리표 "🏨 10/20~10/28"
++      const tag=e?{ch:MEMO_CH[e.platform],cin:ymd8(e.cinY,e.cinM,e.cinD),cout:ymd8(e.coutY,e.coutM,e.coutD)}:{};
++      ex.memos.unshift({text,date:nowStr(),...tag});setExtra(key,ex);openDetail(ri,y,m,d);
++      afterMemoChange(btn);
++    };
++  });
++  document.querySelectorAll('#detailBody .memo-del').forEach(btn=>{
++    btn.onclick=()=>{const key=memoKeyOf(btn);const idx=+btn.dataset.idx;const ex=getExtra(key);ex.memos.splice(idx,1);setExtra(key,ex);openDetail(ri,y,m,d);afterMemoChange(btn);};
+   });
+-  document.querySelectorAll('.memo-edit-btn').forEach(btn=>{
++  document.querySelectorAll('#detailBody .memo-edit-btn').forEach(btn=>{
+     btn.onclick=()=>{
+-      const idx=+btn.dataset.idx;const ex=getExtra(pwKey);const memo=ex.memos[idx];
++      const key=memoKeyOf(btn);
++      const idx=+btn.dataset.idx;const ex=getExtra(key);const memo=ex.memos[idx];
+       const item=btn.closest('.memo-item');if(item.querySelector('.memo-edit-ta'))return;
+       const body=item.querySelector('.memo-item-body');
+-      body.innerHTML=`<textarea class="memo-edit-ta" style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;background:var(--bg);border:1px solid var(--navy);border-radius:var(--r);color:var(--text);resize:vertical;font-family:'DM Sans',sans-serif;outline:none;">${memo.text}</textarea>
++      body.innerHTML=`<textarea class="memo-edit-ta" style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;background:var(--bg);border:1px solid var(--navy);border-radius:var(--r);color:var(--text);resize:vertical;font-family:'DM Sans',sans-serif;outline:none;">${memo.text.replace(/</g,'&lt;')}</textarea>
+       <div style="display:flex;gap:6px;margin-top:6px;">
+-        <button style="flex:1;padding:7px;font-size:12px;background:var(--navy);color:#fff;border:none;border-radius:var(--r);cursor:pointer;" id="ms_${idx}">저장</button>
+-        <button style="padding:7px 12px;font-size:12px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);cursor:pointer;" id="mc_${idx}">취소</button>
++        <button style="flex:1;padding:7px;font-size:12px;background:var(--navy);color:#fff;border:none;border-radius:var(--r);cursor:pointer;" class="memo-save-edit">저장</button>
++        <button style="padding:7px 12px;font-size:12px;background:none;border:1px solid var(--border2);border-radius:var(--r);color:var(--text2);cursor:pointer;" class="memo-cancel-edit">취소</button>
+       </div>`;
+-      document.getElementById(`ms_${idx}`).onclick=()=>{const newText=body.querySelector('textarea').value.trim();if(!newText)return;const ex=getExtra(pwKey);ex.memos[idx]={text:newText,date:nowStr()+' (수정됨)'};setExtra(pwKey,ex);openDetail(ri,y,m,d);};
+-      document.getElementById(`mc_${idx}`).onclick=()=>openDetail(ri,y,m,d);
++      // 머리표(ch·cin·cout)는 유지 — 글만 바뀐다
++      body.querySelector('.memo-save-edit').onclick=()=>{const newText=body.querySelector('textarea').value.trim();if(!newText)return;const ex=getExtra(key);ex.memos[idx]={...ex.memos[idx],text:newText,date:nowStr()+' (수정됨)'};setExtra(key,ex);openDetail(ri,y,m,d);};
++      body.querySelector('.memo-cancel-edit').onclick=()=>openDetail(ri,y,m,d);
+     };
+   });
+ }

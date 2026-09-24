@@ -1,0 +1,107 @@
+diff --git a/index.html b/index.html
+index 5fb8e87..5b32c15 100644
+--- a/index.html
++++ b/index.html
+@@ -1593,6 +1593,44 @@ async function loadExtra(key) {
+   return getExtra(key);
+ }
+ 
++// ── 메모 머리표 · 메모 목록 (memo-indicator) ──
++// 예약앱 달력 📝 는 메모 목록(memo_index)을 본다 → 여기서 메모를 쓰고 지울 때도 목록 한 줄을 넣고 뺀다.
++// 청소앱은 📝 를 그리지 않는다. 날짜 이동·30일 정리 판정은 워커 한 곳에만 (#2)
++const MEMO_CH   = {airbnb:'ab', booking:'bk', trip:'tr', lv:'lv'};
++const MEMO_ICON = {ab:'✈', bk:'🏨', tr:'🌐', lv:'🏡', bl:'🔒'};
++const ymd8 = (y,m,d) => `${y}${String(m+1).padStart(2,'0')}${String(d).padStart(2,'0')}`;
++// "🏨 10/20~10/28" — 메모를 쓴 순간의 예약 (옛 메모는 지금 예약으로 대신)
++function memoHead(memo, e) {
++  if (!e || !e.b) return '';
++  const ch = memo.ch || MEMO_CH[e.platform];
++  const cin = memo.cin || ymd8(e.b.cinY, e.b.cinM, e.b.cinD);
++  const cout = memo.ch ? (memo.cout || '') : ymd8(e.b.coutY, e.b.coutM, e.b.coutD);
++  const md = s => s ? `${+s.slice(4,6)}/${+s.slice(6,8)}` : '';
++  return `${MEMO_ICON[ch] || ''} ${md(cin)}~${md(cout)}`;
++}
++function memoTag(e) {
++  if (!e || !e.b) return {};
++  return { ch: MEMO_CH[e.platform], cin: ymd8(e.b.cinY, e.b.cinM, e.b.cinD), cout: ymd8(e.b.coutY, e.b.coutM, e.b.coutD) };
++}
++// 공유 목록 — 저장 직전 서버 최신본을 다시 읽고 이 줄만 고친다. 못 읽으면 쓰지 않는다 (#22·#26)
++async function syncMemoIndex(e) {
++  if (!e || !e.b) return;
++  const has = (getExtra(e.key).memos || []).length > 0;
++  let list = null;
++  try {
++    const resp = await fetch(`${PROXY_URL}/extra?key=memo_index`);
++    if (resp.ok) {
++      const d = await resp.json();
++      if (Array.isArray(d)) list = d;
++      else if (d && Array.isArray(d.memos) && !d.memos.length && Array.isArray(d.passwords) && !d.passwords.length) list = [];   // 아직 목록이 없다
++    }
++  } catch (err) {}
++  if (!list) return;
++  const out = list.filter(x => x.key !== e.key);
++  if (has) out.push({ key: e.key, room: e.room, ...memoTag(e) });
++  fetch(`${PROXY_URL}/extra`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ key:'memo_index', data: out }) }).catch(() => {});
++}
++
+ let detailKeys = [];
+ let detailKey = null;
+ 
+@@ -1754,25 +1792,25 @@ async function openDetail(ri, y, m, d) {
+     const key = bkKey(r.name, b);
+     const isOut = b.coutY===y && b.coutM===m && b.coutD===d;
+     const isIn  = b.cinY===y  && b.cinM===m  && b.cinD===d;
+-    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'airbnb'});
++    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'airbnb', b, room:r.name});
+   });
+   bkBks.forEach((b) => {
+     const key = bkKey(r.name, b) + '_bk';
+     const isOut = b.coutY===y && b.coutM===m && b.coutD===d;
+     const isIn  = b.cinY===y  && b.cinM===m  && b.cinD===d;
+-    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'booking'});
++    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'booking', b, room:r.name});
+   });
+   trBks.forEach((b) => {
+     const key = bkKey(r.name, b) + '_tr';
+     const isOut = b.coutY===y && b.coutM===m && b.coutD===d;
+     const isIn  = b.cinY===y  && b.cinM===m  && b.cinD===d;
+-    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'trip'});
++    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'trip', b, room:r.name});
+   });
+   lvBks.forEach((b) => {
+     const key = bkKey(r.name, b) + '_lv';
+     const isOut = b.coutY===y && b.coutM===m && b.coutD===d;
+     const isIn  = b.cinY===y  && b.cinM===m  && b.cinD===d;
+-    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'lv'});
++    detailKeys.push({key, role: isOut ? 'out' : isIn ? 'in' : null, platform:'lv', b, room:r.name});
+   });
+   if (!detailKeys.length) {
+     const fallback = `${r.name}|${y}${String(m+1).padStart(2,'0')}${String(d).padStart(2,'0')}`;
+@@ -1926,6 +1964,7 @@ function renderMemoUI() {
+       html += memos.map((memo, i) => `
+         <div class="memo-item" id="memo-item-${ki}-${i}" style="border-color:${borderColor};">
+           <div class="memo-item-body" id="memo-body-${ki}-${i}">
++            ${memoHead(memo, detailKeys[ki]) ? `<div class="memo-item-date" style="margin:0 0 2px;">${memoHead(memo, detailKeys[ki])}</div>` : ''}
+             <div class="memo-item-text">${memo.text.replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+             <div class="memo-item-date">${memo.date}</div>
+           </div>
+@@ -1965,6 +2004,7 @@ function renderMemoUI() {
+       extra.memos.splice(idx, 1);
+       setExtra(key, extra);
+       renderMemoUI();
++      syncMemoIndex(detailKeys[ki]);
+     });
+   });
+ 
+@@ -2011,9 +2051,10 @@ function renderMemoUI() {
+       if (!text) return;
+       const extra = getExtra(key);
+       if (!extra.memos) extra.memos = [];
+-      extra.memos.unshift({text, date: nowStr()});
++      extra.memos.unshift({text, date: nowStr(), ...memoTag(detailKeys[ki])});
+       setExtra(key, extra);
+       renderMemoUI();
++      syncMemoIndex(detailKeys[ki]);
+     });
+   });
+ 
