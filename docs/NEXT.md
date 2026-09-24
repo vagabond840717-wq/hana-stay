@@ -2,12 +2,14 @@
 
 ## 09/24 예약 메모 표시
 
-메모가 있는 예약의 달력 칸마다 📝 를 붙인다. **구현 계획서 완료 — 사장님 승인 대기. 아직 코딩 전.**
+메모가 있는 예약의 달력 칸마다 📝 를 붙인다. **코드 완성 · 가짜 데이터로 검증 끝 — 배포 승인 대기.**
 
-- 스펙: [`DRAFT-memo-indicator.md`](features/DRAFT-memo-indicator.md) — 8개 결정 확정
-- 계획: [`PLAN-memo-indicator.md`](features/PLAN-memo-indicator.md) — Task 1~6
-- 승인 나면: `/implement memo-indicator` (워커 → 예약앱 → 청소앱 → 문서 순)
-- 되돌아갈 지점: 예약앱 `c21b0d9` · 청소앱 `6b5cbf6` · 워커 `9709111`
+- 코드 사본: [`patches/memo-indicator/`](../patches/memo-indicator/) — 각 저장소 main 에서 `git apply`
+  (워커 `9709111` · 예약앱 `c21b0d9` · 청소앱 `6b5cbf6` 기준. 푸시 = 즉시 배포)
+- 검증: 예약앱 칸 1,360개 색·글자 변화 0 (📝 만 추가) / 워커 이관·날짜 이동·30일 정리 모의 시험 통과 / 청소앱 메모 저장 시 목록 갱신 확인
+- 남은 순서: ① 워커 배포 → `POST /memo/migrate?dry=1` 결과 사장님 확인 → 실제 이관 ② 예약앱 ③ 청소앱 ④ 문서(`/done`)
+- 막힌 것: 배포 권한(사장님 승인 필요) · 이 세션에서 워커 주소 접속 차단 (환경 설정 → 네트워크에 `ical-proxy.vagabond1984.workers.dev` 허용)
+- 스펙·계획: [`DRAFT-memo-indicator.md`](features/DRAFT-memo-indicator.md) · [`PLAN-memo-indicator.md`](features/PLAN-memo-indicator.md)
 
 ---
 
@@ -21,7 +23,7 @@
 
 | 이름 | 무슨 일이었나 | 결과 |
 |---|---|---|
-| `09/24 예약 메모 표시` | 메모 있는 예약에 📝 표시 | ⏳ 지금 여기 (계획 승인 대기) |
+| `09/24 예약 메모 표시` | 메모 있는 예약에 📝 표시 | ⏳ 지금 여기 (배포 승인 대기) |
 | `09/24 트립 블락 표시` | 블락에 🌐 트립 표시 달기 | 🧊 미룸 — 스펙 `DRAFT-manual-trip-booking.md`, 시작: `/plan manual-trip-booking` |
 | `09/23 수첩이 진짜 예약 지움` | 진짜 예약이 저장되자마자 지워짐 | ✅ 12건 복구 · [#34](05-known-issues.md) |
 | `09/23 입실일 밀림` | 투숙 중 손님이 오늘 체크인으로 보임 | ✅ 원장에서 복원 · [#35](05-known-issues.md) |
