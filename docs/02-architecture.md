@@ -42,6 +42,8 @@ POST /rooms          → 호실 배열 저장 (body: JSON 배열)
 ```
 GET  /extra?key=<bkKey>   → 해당 키의 { passwords, memos } 반환
 POST /extra               → { key, data } 저장
+GET  /memo                → 메모 목록 (extra_memo_index) 조회 — 진단용
+POST /memo/migrate[?dry=1] → 옛 메모 1회 이관 (2026-09-25 실행 완료 — 다시 돌릴 일 없음)
 ```
 
 ### iCal 내보내기 (⚠ 전 채널 영향)

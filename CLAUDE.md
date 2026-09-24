@@ -160,6 +160,8 @@ E:\airbnb\
 | GET | `/ledger?from=&to=` | 과거 확정 원장 조회 (`YYYY-MM`, 생략 시 최근 13개월) |
 | POST | `/ledger/freeze` | 지금 굳히기 (진단용. 안전창 밖이면 skip) |
 | GET | `/changes?room=&ch=&limit=` | 피드 변화 기록 조회 — 무엇이 언제 나타나고 사라졌나 |
+| GET | `/memo` | 예약 메모 목록 (진단용) |
+| POST | `/memo/migrate` | 옛 메모 1회 이관 (`?dry=1` 예행) — 2026-09-25 실행 완료 |
 | GET | `/?url=<ical>&fix=tr\|bk&room=<호실>` | 청소앱용 — 교정본 iCal (아래 참조) |
 
 **워커 소스**: `E:\airbnb\ical-proxy\worker.js` (별도 저장소 `vagabond840717-wq/ical-proxy`, git push → 자동 배포)
@@ -202,7 +204,8 @@ const de = `${bk.coutY}${String(bk.coutM+1).padStart(2,'0')}${String(bk.coutD).p
 ### bkKey 형식 (비밀번호/메모 키)
 ```js
 `${roomName}|${cinY}${String(cinM+1).padStart(2,'0')}${String(cinD).padStart(2,'0')}`
-// Booking.com: + "_bk" | Trip.com: + "_tr" | 리브애니웨어: + "_lv"
+// Booking.com: + "_bk" | Trip.com: + "_tr" | 리브애니웨어: + "_lv" | 수동 블락: + "_bl"
+// ⚠ 2026-09-25부터 두 앱이 같은 꼬리표를 쓴다 (전엔 예약앱만 꼬리표 없이 써서 서랍이 갈렸다)
 // ⚠ roomName이 키에 포함 → 호실명 변경 시 데이터 고아됨
 ```
 
@@ -349,6 +352,17 @@ const de = `${bk.coutY}${String(bk.coutM+1).padStart(2,'0')}${String(bk.coutD).p
 // ⛔ exportIcal 무영향 — 앞잘림은 지난 밤만 깎는데 지난 밤은 팔 수 없다.
 ```
 
+### 예약 메모 표시 (memo-indicator) — 2026-09-25
+```js
+// 메모 한 줄: {text, date, ch, cin, cout}  ← ch·cin·cout = 머리표 "🏨 10/20~10/28". 쓴 순간 고정
+// 목록 KV extra_memo_index: [{key, room, ch, cin, cout, uid?}] — 메모 있는 서랍만. 예약앱 📝 는 이것만 읽는다
+//   공유 배열 → 앱은 반드시 saveListMerged (#22·#26)
+// 워커 upkeepMemos (5분 동기화 끝): 에어비앤비 uid 로 날짜 변경 따라 메모 이동 / 하루 1회 퇴실+30일 메모 삭제(비밀번호 남김)
+// ⛔ 메모를 자동으로 지우는 길은 30일 정리 하나뿐 — 예약이 피드에서 사라지면 📝 만 숨긴다 (#27)
+// ⛔ uid 는 에어비앤비만. 아카이브·알림 기억표에는 넣지 않는다(모양 불변). exportIcal 무영향 (45주소 바이트 동일 확인)
+// 상세: docs/features/memo-indicator.md · docs/03-data-model.md
+```
+
 ### tr_feed_prev (피드 스냅샷 — ⚠ 확인 판정, 예약앱 전용)
 ```js
 // localStorage: 'hana_feed_prev' | KV: extra_tr_feed_prev (/extra?key=tr_feed_prev)
@@ -401,7 +415,7 @@ cellTypeFor(bookings, day, y, m)
 // 로드: KV 우선 → 실패 시 localStorage 폴백
 ```
 
-**⚠ 공유 목록(`manual_blocks`, `tr_cuts`)은 위 패턴을 쓰면 안 된다.**
+**⚠ 공유 목록(`manual_blocks`, `tr_cuts`, `memo_index`)은 위 패턴을 쓰면 안 된다.**
 호실 구분 없이 배열 하나로 저장되므로, 통째 덮어쓰기는 **다른 기기·다른 호실의 항목을 지운다** (#22, #26).
 ```js
 // 반드시 saveListMerged 경유 — 저장 직전 서버 최신 배열을 다시 읽고 '내 변경만' 얹는다
