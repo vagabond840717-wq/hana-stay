@@ -167,6 +167,7 @@ E:\airbnb\
 | GET | `/memo` | 예약 메모 목록 (진단용) |
 | POST | `/memo/migrate` | 옛 메모 1회 이관 (`?dry=1` 예행) — 2026-09-25 실행 완료 |
 | GET | `/?url=<ical>&fix=tr\|bk&room=<호실>` | 청소앱용 — 교정본 iCal (아래 참조) |
+| GET | `/?url=<에어비앤비>&fix=ab` | 청소앱용 — 오늘 입실·퇴실 말고는 설명 줄(전화 끝 4자리) 삭제 |
 
 **워커 소스**: `E:\airbnb\ical-proxy\worker.js` (별도 저장소 `vagabond840717-wq/ical-proxy`, git push → 자동 배포)
 
@@ -354,6 +355,20 @@ const de = `${bk.coutY}${String(bk.coutM+1).padStart(2,'0')}${String(bk.coutD).p
 //    일정에서 사라진다.** 끊어 보는 쪽이 안전하다. 당일 연장은 수동 블락으로 잡는다.
 // 적용: GET /bookings · GET /?url=&fix=.  원장에 어제 칸이 없으면 수첩(untrimSegs)으로 폴백.
 // ⛔ exportIcal 무영향 — 앞잘림은 지난 밤만 깎는데 지난 밤은 팔 수 없다.
+```
+
+### 에어비앤비 비번 자동 (airbnb-auto-pw) — 2026-10-18
+```js
+// 에어비앤비 피드 DESCRIPTION 의 'Phone Number (Last 4 Digits): ####' = 도어락 비밀번호. 저장 안 함, 보여주기만
+// 워커 parseIcal → synced_bookings.ab[].ph  (⛔ 아카이브·알림 기억표엔 uid 와 같이 뺀다. 내보내기·원장 무영향)
+// 예약앱: 손 입력 없으면 ph 를 크게. 교대 날 나가는/들어오는 손님 두 상자. 제한 없음(사장님 전용)
+// 청소앱: 오늘(기기 날짜)의 체크인·체크아웃 상자만 공개 — 손 입력 번호도 같은 규칙 (pwOpenToday)
+//         에어비앤비 피드는 fix=ab 로 받는다 → 워커가 오늘 입실·퇴실 말고는 DESCRIPTION 줄을 통째 지움
+//   ⛔ 전화 줄만 골라 지우지 말 것 (문구가 바뀌면 샌다). 실패 시에도 전부 지운 판 — 원본으로 물러서지 않는다
+//   ⛔ fix 없는 /?url= 는 원본 그대로 (진단용)
+// ⚠ 끝 4자리 뽑는 정규식이 두 곳 (워커·청소앱 parseIcal) — 같이 고칠 것 (#2)
+// ⚠ 워커 주소는 잠금이 없어 기술 있는 사람은 지금도 볼 수 있다 → #38 (예약앱 전용 열쇠, 미결정)
+// 상세: docs/features/airbnb-auto-pw.md
 ```
 
 ### 예약 메모 표시 (memo-indicator) — 2026-09-25
