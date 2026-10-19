@@ -167,7 +167,12 @@ E:\airbnb\
 | GET | `/memo` | 예약 메모 목록 (진단용) |
 | POST | `/memo/migrate` | 옛 메모 1회 이관 (`?dry=1` 예행) — 2026-09-25 실행 완료 |
 | GET | `/?url=<ical>&fix=tr\|bk&room=<호실>` | 청소앱용 — 교정본 iCal (아래 참조) |
-| GET | `/?url=<에어비앤비>&fix=ab` | 청소앱용 — 오늘 입실·퇴실 말고는 설명 줄(전화 끝 4자리) 삭제 |
+| GET | `/?url=<에어비앤비>&fix=ab` | 청소앱용 — 오늘 입실·퇴실 말고는 설명 줄(전화 끝 4자리) 삭제 (링크 없는 옛 청소앱만) |
+| GET | `/feed?room=&ch=ab\|bk\|tr\|lv` | 청소앱(전용 링크)용 — 원주소 없이 피드. bk·tr 교정, ab 설명 줄 전부 삭제 |
+| GET | `/access/me` | 앱이 '나는 누구·상태·잠금 여부'를 묻는 길 |
+| POST | `/access/owner/claim` | 사장님 열쇠 만들기 — **딱 한 번** (이미 있으면 409) |
+| GET/POST | `/access/links` | 청소 인력 명단 · add/stop/resume/approve/reject/renew/enforce (사장님만) |
+| GET | `/access/log?name=&limit=` | 열람 기록 (사장님만, 90일·5,000줄) |
 
 **워커 소스**: `E:\airbnb\ical-proxy\worker.js` (별도 저장소 `vagabond840717-wq/ical-proxy`, git push → 자동 배포)
 
@@ -367,8 +372,29 @@ const de = `${bk.coutY}${String(bk.coutM+1).padStart(2,'0')}${String(bk.coutD).p
 //   ⛔ 전화 줄만 골라 지우지 말 것 (문구가 바뀌면 샌다). 실패 시에도 전부 지운 판 — 원본으로 물러서지 않는다
 //   ⛔ fix 없는 /?url= 는 원본 그대로 (진단용)
 // ⚠ 끝 4자리 뽑는 정규식이 두 곳 (워커·청소앱 parseIcal) — 같이 고칠 것 (#2)
-// ⚠ 워커 주소는 잠금이 없어 기술 있는 사람은 지금도 볼 수 있다 → #38 (예약앱 전용 열쇠, 미결정)
+// ⚠ 뒷문(#38)은 청소 전용 링크(cleaner-link)로 막는다 — 잠금 스위치를 켜야 효과
 // 상세: docs/features/airbnb-auto-pw.md
+```
+
+### 청소 전용 링크 (cleaner-link) — 2026-10-20
+```js
+// 왜: 청소 인력이 도어락 번호를 세팅 → 외워 두고 손님 없을 때 들어가는 도난 위험. '누가 봤나'를 남겨 막는다
+// 머리글 X-Hana-Key(열쇠) · X-Hana-Dev(청소앱 기기 번호). 링크 #k=<열쇠> 로 한 번 열면 폰이 기억, 주소창에서 지움
+// 사장님 열쇠: KV access_owner(해시) 또는 워커 비밀값 OWNER_KEY (Cloudflare 설정 — 분실 시 새로 지정)
+// 청소 열쇠  : KV access_links [{id,name,key(해시),on,devices:[{dev(해시),ua,ok}],pending,lastUsed}]
+//              처음 연 폰 한 대에 묶임. 다른 폰 = pending → 사장님 허용/거절
+// 모드 accessMode: full(사장님·또는 열쇠 없음+잠금 꺼짐) / clean / cleanNoPw(대기·중지+잠금 꺼짐) / deny(잠금 켜짐) → 403
+// 잠금 스위치 KV access_enforce='1' — 예약앱 👥 화면에서 사장님이 켬/끔. 끄면 즉시 예전처럼
+// clean 모드: /extra 서랍은 오늘 체크인·체크아웃만 비밀번호+auto(ph) → 기록 / 그 밖 passwords:[] open:false
+//   ⚠ POST /extra 는 비밀번호를 볼 수 없는 요청이면 서버 비밀번호를 **보존** (빈칸으로 받은 앱이 메모만 고쳐도 안 지워지게)
+//   ⚠ '오늘 퇴실' 판정 재료는 /bookings 와 같은 교정본 — 부킹·트립은 자정에 오늘 퇴실분을 피드에서 뺀다
+//   /rooms 원주소 'hidden' · POST /rooms 거절 · /bookings ph 뺌 · 달력은 /feed
+// 기록 KV access_log — 볼 때(같은 서랍 10분 묶음)·바꿀 때·거절(사람·상태별 하루 1줄)·사장님 조작. 90일·5,000줄
+// 청소앱: 호실 관리 숨김(원주소가 폰에 남으면 뒷문) · 비밀번호는 메모리에만(폰 저장소엔 메모만) · 시작 시 옛 비밀번호·원주소 지움
+//         기본 호실 자동 저장 삭제 — 청소앱은 /rooms 에 쓰지 않는다
+// ⛔ 잠금 꺼짐 동안 열쇠 없는 요청은 이전과 바이트 동일해야 한다 (배포 시 52주소 대조)
+// ⛔ /ical 내보내기 · /sync · cron · /push · /archive · /ledger · /changes 는 잠금 대상 아님
+// 상세: docs/features/cleaner-link.md
 ```
 
 ### 예약 메모 표시 (memo-indicator) — 2026-09-25

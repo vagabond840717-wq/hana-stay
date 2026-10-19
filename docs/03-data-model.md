@@ -427,6 +427,23 @@ extra_<호실>|<시작일>_bl              ← 수동 블락 (새 꼬리표)
 - 예약앱이 비밀번호 칸에 손 입력이 없을 때 보여준다. **어디에도 저장하지 않는다** (비번 서랍 그대로)
 - ⛔ 아카이브·알림 기억표(`last_booking_uids`)에는 `uid` 와 같이 **빼고** 넣는다. 원장은 `{cin,cout}` 만, 내보내기는 날짜만 → 무영향
 - 청소앱은 `/bookings` 를 안 쓰고 `/?url=<에어비앤비>&fix=ab` 로 받는다 → 오늘 입실·퇴실 예약만 설명 줄이 남는다
+  (10/20 부터 전용 링크로 연 청소앱은 `/feed` + `/extra` 의 `auto` 로 받는다 — 아래 cleaner-link)
+
+### 청소 전용 링크 저장소 (2026-10-20, cleaner-link) — 워커만 쓴다 (⚠ `extra_` 접두사 없음)
+```js
+access_owner    "<sha256>"                 // 사장님 열쇠 해시. 워커 비밀값 OWNER_KEY 도 사장님으로 통과(복구용)
+access_links    [{ id, name, key:"<sha256>", on:true, created, lastUsed, lastDay:"YYYYMMDD",
+                   devices:[{ dev:"<sha256>", ua:"아이폰 크롬", first, ok:true|false }],   // ok:false = 사장님이 거절한 폰
+                   pending:[{ dev, ua, ts }] }]                                          // 허용 대기 폰 (최대 5)
+access_log      [{ ts, id, name, room?, key?, role?:"in"|"out", act, pw?, state? }]     // 최신이 앞, 90일·5,000줄
+                // act: view·set·del·deny·add·stop·resume·approve·reject·renew·lock-on·lock-off
+access_enforce  "1" | (없음)               // 잠금 스위치
+```
+- 열쇠·기기 번호 원문은 어디에도 저장하지 않는다 (해시만). 링크는 만들 때 한 번만 보인다
+- `access_links` 는 공유 배열 — 워커가 매번 새로 읽어 그 한 사람만 고친다. 못 읽으면 쓰지 않는다 (#22·#26)
+- `lastUsed` 는 하루 1번만 갱신 (KV 쓰기 한도)
+- 청소앱 폰 저장소: `hana_key`(링크 열쇠) · `hana_dev`(기기 번호). `hana_ex_*` 에는 **메모만** (비밀번호 빈칸) · `hana_rooms` 원주소는 `hidden`
+- 예약앱 폰 저장소: `hana_owner_key`
 
 ### 워커가 하는 일 (`upkeepMemos`, 5분 동기화 끝)
 - 에어비앤비 **날짜 변경 따라가기**: 같은 `uid` 가 다른 입실일로 보이면 메모를 새 서랍으로 옮긴다 (비밀번호는 안 옮김)
