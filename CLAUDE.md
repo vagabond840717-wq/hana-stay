@@ -174,6 +174,8 @@ E:\airbnb\
 | GET | `/archive` | 예약 이력 아카이브 로드 (통계용) |
 | GET | `/ical/<호실명>` | **HANA STAY 통합 iCal 내보내기** — 아래 주의 |
 | GET | `/daylock` | 트립 당일잠금 판정 상태 (진단용) |
+| GET | `/push/key` | 알림 공개 열쇠 (예약앱 구독용). 비밀값 없으면 워커가 만든 KV `vapid_keys` — ⛔ 지우면 모든 폰 구독 무효 |
+| POST | `/push/test` | 등록된 모든 폰에 시험 알림 — **알림 만들면 이걸로 실제 도착 확인** (#41) |
 | GET | `/hold` | 피드 끊김 버팀 상태 (진단용) — `호실\|채널: 처음 풀린 시각`. `{}` = 버티는 곳 없음 |
 | POST | `/daylock/backfill` | 굳은 가짜 소급 교정 (`?dry=1` 예행) |
 | GET | `/ledger?from=&to=` | 과거 확정 원장 조회 (`YYYY-MM`, 생략 시 최근 13개월) |

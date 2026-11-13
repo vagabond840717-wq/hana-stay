@@ -664,3 +664,9 @@ triggerSync()
 - 트립 피드는 하루 5~14번 5분씩 정상 응답(200)인데 예약 0개. `fetchAndParseIcal` 은 오류만 `null` → 빈 달력은 `[]` 로 대입됨
 - 교정: `holdFeed` — 앞날 밤이 풀리면 **1시간** 내내 이어질 때만 믿는다. 트립·부킹·리브(`HOLD_PLATFORMS`), 에어비앤비 제외 (사장님 결정)
 - 부킹 10/24~ 끊김 0번. 에어비앤비 1번(203호 11/03, 5분)
+
+## #41 폰 알림이 하나도 안 나감 — 알림 서명 열쇠 없음 (2026-11-13)
+- `/push/test` → 등록 3곳(아이폰 1·브라우저 2) 전부 `Cannot read properties of undefined (reading 'length')`
+- 원인: 워커 비밀값 `VAPID_PRIVATE_KEY` 없음 → `makeVapid` 에서 실패. 새 예약·연결 오류·이상 알림 전부 안 갔다
+- 교정: 비밀값 없으면 워커가 만들어 KV `vapid_keys` 보관, `GET /push/key` · 예약앱 자동 재구독
+- 교훈: 알림을 만들면 **실제 폰으로 보내 확인**할 것 (`POST /push/test`)
